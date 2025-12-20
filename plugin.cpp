@@ -1,11 +1,22 @@
-﻿struct Rule {
+﻿struct QuestRule {
+    TESQuest* form;
+    uint16_t stage = 0;
+    std::string compare = ">=";
+};
+
+struct GlobalVarRule {
+    TESGlobal* form;
+    float value = 1.0f;
+    std::string compare = "=";
+};
+
+struct Rule {
     std::vector<std::string> keywords;
     BGSPerk* perk;
     std::vector<BGSLocation*> locations;
     std::vector<TESFaction*> vendorFactions;
-    TESGlobal* global;
-    float gloablVal = 1.0f;
-    TESQuest* completedQuest;
+    GlobalVarRule global{};
+    QuestRule quest{};
     float buyMult = 1.0f;
     float sellMult = 1.0f;
 };
@@ -23,7 +34,7 @@ bool PlayerIsInLocation(BGSLocation* location) {
     return false;
 }
 
-bool PlayerIsInAnyLocations(std::vector<BGSLocation*> locations) {
+bool PlayerIsInAnyLocations(const std::vector<BGSLocation*>& locations) {
     for (auto location : locations) {
         if (PlayerIsInLocation(location)) {
             return true;
@@ -35,12 +46,14 @@ bool PlayerIsInAnyLocations(std::vector<BGSLocation*> locations) {
 RE::Actor* GetBarterTarget() {
     ObjectRefHandle speaker = MenuTopicManager::GetSingleton()->speaker;
     if (speaker) {
-        return speaker.get().get()->As<Actor>();
+        auto ref = speaker.get();
+        if (!ref) return nullptr;
+        return ref->As<Actor>();
     }
     return nullptr;
 }
 
-bool IsInAnyFaction(Actor* actor, std::vector<TESFaction*> vendorFactions) {
+bool IsInAnyFaction(Actor* actor, const std::vector<TESFaction*>& vendorFactions) {
     for (auto faction : vendorFactions) {
         if (actor->IsInFaction(faction)) {
             return true;
@@ -49,12 +62,23 @@ bool IsInAnyFaction(Actor* actor, std::vector<TESFaction*> vendorFactions) {
     return false;
 }
 
+template <typename T>
+bool compare(T a, T b, const std::string& op) {
+    if (op == "=" || op == "==") return a == b;
+    if (op == "<") return a < b;
+    if (op == "<=") return a <= b;
+    if (op == ">") return a > b;
+    if (op == ">=") return a >= b;
+    if (op == "!=") return a != b;
+    return false;
+}
+
 bool ValidateRule(Rule& theRule) {
     if (theRule.perk) {
         if (!player->HasPerk(theRule.perk)) return false;
     }
-    if (theRule.global) {
-        if (theRule.global->value != theRule.gloablVal) return false;
+    if (theRule.global.form) {
+        if (!compare(theRule.global.form->value, theRule.global.value, theRule.global.compare)) return false;
     }
     if (theRule.locations.size()) {
         if (!PlayerIsInAnyLocations(theRule.locations)) return false;
@@ -64,8 +88,8 @@ bool ValidateRule(Rule& theRule) {
         if (!target) return false;
         if (!IsInAnyFaction(target, theRule.vendorFactions)) return false;
     }
-    if (theRule.completedQuest) {
-        if (!theRule.completedQuest->IsCompleted()) return false;
+    if (theRule.quest.form) {
+        if (!compare(theRule.quest.form->currentStage, theRule.quest.stage, theRule.quest.compare)) return false;
     }
     return true;
 }
@@ -103,7 +127,6 @@ void Inject(BSFixedString menuName) {
         ruleData.SetMember("sell", rule.sellMult);
         data.PushBack(ruleData);
     }
-    ConsoleLog::GetSingleton()->Print(fmt::format("Injecting: {}", bInject ? "yes" : "nah").c_str());
     if (!bInject) return;
     _root.SetMember("DPF", data);
 
@@ -178,9 +201,39 @@ void ParseData(const json& data) {
                     }
                 }
             }
-            if (conditions.contains("completedQuest")) {
-                newRule.completedQuest = TESForm::LookupByEditorID<TESQuest>(conditions.at("completedQuest").get<std::string>());
-                if (!newRule.completedQuest) continue;
+            if (conditions.contains("global")) {
+                const auto& global = conditions.at("global");
+                if (global.contains("name")) {
+                    TESGlobal* form = TESForm::LookupByEditorID<TESGlobal>(global.at("name").get<std::string>());
+                    if (form) {
+                        newRule.global.form = form;
+                        if (global.contains("value")) {
+                            newRule.global.value = global.at("value").get<float>();
+                        }
+                        if (global.contains("comparison")) {
+                            newRule.global.compare = global.at("comparison").get<std::string>();
+                        }
+                    } else {
+                        continue;
+                    }
+                }
+            }
+            if (conditions.contains("quest")) {
+                const auto& quest = conditions.at("quest");
+                if (quest.contains("id")) {
+                    TESQuest* form = TESForm::LookupByEditorID<TESQuest>(quest.at("id").get<std::string>());
+                    if (form) {
+                        newRule.quest.form = form;
+                        if (quest.contains("stage")) {
+                            newRule.quest.stage = quest.at("stage").get<uint16_t>();
+                        }
+                        if (quest.contains("comparison")) {
+                            newRule.quest.compare = quest.at("comparison").get<std::string>();
+                        }
+                    } else {
+                        continue;
+                    }
+                }
             }
         }
         if (item.contains("buyMult")) {
@@ -228,7 +281,8 @@ void OnDataLoad() {
     if (!rules.empty()) {
         disabled = TESForm::LookupByEditorID<TESGlobal>("DynamicPricing_Disabled");
         player = PlayerCharacter::GetSingleton();
-        UI::GetSingleton()->AddEventSink(new MyEventSink());
+        static MyEventSink g_EventSink;
+        UI::GetSingleton()->AddEventSink(&g_EventSink);
     }
 }
 
