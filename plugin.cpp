@@ -17,6 +17,7 @@ struct Rule {
     std::vector<TESFaction*> vendorFactions;
     GlobalVarRule global{};
     QuestRule quest{};
+    BGSPerk* conditionPerk;
     float buyMult = 1.0f;
     float sellMult = 1.0f;
 };
@@ -91,6 +92,9 @@ bool ValidateRule(Rule& theRule) {
     if (theRule.quest.form) {
         if (!compare(theRule.quest.form->currentStage, theRule.quest.stage, theRule.quest.compare)) return false;
     }
+    if (theRule.conditionPerk) {
+        if (!theRule.conditionPerk->perkConditions.IsTrue(player, GetBarterTarget())) return false;
+    }
     return true;
 }
 
@@ -127,6 +131,7 @@ void Inject(BSFixedString menuName) {
         ruleData.SetMember("sell", rule.sellMult);
         data.PushBack(ruleData);
     }
+//    ConsoleLog::GetSingleton()->Print(fmt::format("Injecting Dynamic Pricing: {}", bInject ? "yes" : "nah").c_str());
     if (!bInject) return;
     _root.SetMember("DPF", data);
 
@@ -233,6 +238,16 @@ void ParseData(const json& data) {
                     } else {
                         continue;
                     }
+                }
+            }
+            if (conditions.contains("conditionForm")) {
+                TESForm* form = TESForm::LookupByEditorID(conditions.at("conditionForm").get<std::string>());
+                if (form) {
+                    if (form->GetFormType() == FormType::Perk) {
+                        newRule.conditionPerk = form->As<BGSPerk>();
+                    }
+                } else {
+                    continue;
                 }
             }
         }

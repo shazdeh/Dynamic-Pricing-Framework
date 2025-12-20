@@ -66,13 +66,16 @@ class DynamicPricing extends MovieClip {
     }
 
     function processItem(itemKeywords:Object, price:Number, isBuying:Boolean) : Number {
+        var total:Number = 1;
+
         for (var i = 0; i < data.length; i++) {
             if (doKeywordsMatch(data[i].keywords, itemKeywords)) {
-                price *= isBuying ? data[i].buy : data[i].sell;
+                var mult:Number = isBuying ? data[i].buy : data[i].sell;
+                total += (mult - 1);
             }
         }
 
-        return price;
+        return price * total;
     }
 
     // check if an item matches any of the keywords specified in the rule
