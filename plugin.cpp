@@ -20,13 +20,21 @@ struct Rule {
     BGSPerk* conditionPerk;
     float buyMult = 1.0f;
     float sellMult = 1.0f;
+    bool defaultMults = true;
 };
 
 std::vector<Rule> rules;
 TESGlobal* disabled;
 PlayerCharacter* player;
 
-bool PlayerIsInLocation(BGSLocation* location) {
+// config
+bool showIndicators = true;
+bool colorCode = true;
+std::string favorablePriceColor = "0x00ff00";
+std::string unfavorablePriceColor = "0xff0000";
+int indicatorPadding = 5;
+
+static bool PlayerIsInLocation(BGSLocation* location) {
     BGSLocation* current = player->GetCurrentLocation();
     while (current) {
         if (current == location) return true;
@@ -35,7 +43,7 @@ bool PlayerIsInLocation(BGSLocation* location) {
     return false;
 }
 
-bool PlayerIsInAnyLocations(const std::vector<BGSLocation*>& locations) {
+static bool PlayerIsInAnyLocations(const std::vector<BGSLocation*>& locations) {
     for (auto location : locations) {
         if (PlayerIsInLocation(location)) {
             return true;
@@ -44,7 +52,7 @@ bool PlayerIsInAnyLocations(const std::vector<BGSLocation*>& locations) {
     return false;
 }
 
-RE::Actor* GetBarterTarget() {
+static RE::Actor* GetBarterTarget() {
     ObjectRefHandle speaker = MenuTopicManager::GetSingleton()->speaker;
     if (speaker) {
         auto ref = speaker.get();
@@ -54,7 +62,7 @@ RE::Actor* GetBarterTarget() {
     return nullptr;
 }
 
-bool IsInAnyFaction(Actor* actor, const std::vector<TESFaction*>& vendorFactions) {
+static bool IsInAnyFaction(Actor* actor, const std::vector<TESFaction*>& vendorFactions) {
     for (auto faction : vendorFactions) {
         if (actor->IsInFaction(faction)) {
             return true;
@@ -74,7 +82,7 @@ bool compare(T a, T b, const std::string& op) {
     return false;
 }
 
-bool ValidateRule(Rule& theRule) {
+static bool ValidateRule(Rule& theRule) {
     if (theRule.perk) {
         if (!player->HasPerk(theRule.perk)) return false;
     }
@@ -98,7 +106,7 @@ bool ValidateRule(Rule& theRule) {
     return true;
 }
 
-void Inject(BSFixedString menuName) {
+static void Inject(BSFixedString menuName) {
     auto ui = UI::GetSingleton();
     if (!ui) return;
 
@@ -129,11 +137,23 @@ void Inject(BSFixedString menuName) {
         ruleData.SetMember("keywords", keywords);
         ruleData.SetMember("buy", rule.buyMult);
         ruleData.SetMember("sell", rule.sellMult);
+        if (rule.defaultMults == false) {
+            ruleData.SetMember("defaultMults", false);
+        }
         data.PushBack(ruleData);
     }
-//    ConsoleLog::GetSingleton()->Print(fmt::format("Injecting Dynamic Pricing: {}", bInject ? "yes" : "nah").c_str());
     if (!bInject) return;
     _root.SetMember("DPF", data);
+
+    // add config
+    GFxValue config;
+    movie->CreateObject(&config);
+    config.SetMember("showIndicators", showIndicators);
+    config.SetMember("colorCode", colorCode);
+    config.SetMember("favorablePriceColor", GFxValue(favorablePriceColor));
+    config.SetMember("unfavorablePriceColor", GFxValue(unfavorablePriceColor));
+    config.SetMember("indicatorPadding", indicatorPadding);
+    _root.SetMember("DPF_Config", config);
 
     GFxValue args[2];
     args[0] = GFxValue("DPF");
@@ -146,7 +166,7 @@ void Inject(BSFixedString menuName) {
     }
 }
 
-void ParseData(const json& data) {
+static void ParseData(const json& data) {
     rules.reserve(data.size());
     for (const auto& item : data) {
         Rule newRule{};
@@ -171,7 +191,7 @@ void ParseData(const json& data) {
                     if (form) {
                         newRule.locations = {form};
                     } else {
-                        continue; // don't need to add
+                        continue;  // don't need to add
                     }
                 } else if (locations.is_array()) {
                     for (const auto& location : locations) {
@@ -181,7 +201,7 @@ void ParseData(const json& data) {
                         }
                     }
                     if (newRule.locations.empty()) {
-                        continue; // none of the locations were valid, throw it away
+                        continue;  // none of the locations were valid, throw it away
                     }
                 }
             }
@@ -202,7 +222,7 @@ void ParseData(const json& data) {
                         }
                     }
                     if (newRule.vendorFactions.empty()) {
-                        continue; // none of the vendorFactions were valid, throw it away
+                        continue;  // none of the vendorFactions were valid, throw it away
                     }
                 }
             }
@@ -257,11 +277,15 @@ void ParseData(const json& data) {
         if (item.contains("sellMult")) {
             newRule.sellMult = item.at("sellMult").get<float>();
         }
+        // weather default price multipliers should be disabled for this item
+        if (item.contains("defaultMults") && item.at("defaultMults").get<bool>() == false) {
+            newRule.defaultMults = false;
+        }
         rules.emplace_back(std::move(newRule));
     }
 }
 
-void BuildRules() {
+static void BuildRules() {
     const std::filesystem::path dir = "Data/SKSE/Plugins/DynamicPricing";
     if (!std::filesystem::exists(dir)) return;
     for (auto& file : std::filesystem::directory_iterator(dir)) {
@@ -276,7 +300,7 @@ void BuildRules() {
     }
 }
 
-bool IsDisabled() { return disabled && disabled->value == 1.0f; }
+static bool IsDisabled() { return disabled && disabled->value == 1.0f; }
 
 class MyEventSink : public RE::BSTEventSink<MenuOpenCloseEvent> {
 public:
@@ -291,9 +315,27 @@ public:
     }
 };
 
-void OnDataLoad() {
+static void LoadConfig() {
+    const std::filesystem::path configFile = "Data/SKSE/Plugins/DynamicPricing.json";
+    if (!std::filesystem::exists(configFile)) return;
+    std::ifstream ifile{configFile};
+    if (!ifile) return;
+    try {
+        json data = json::parse(ifile);
+        if (data.is_discarded()) return;
+        showIndicators = data.at("showIndicators").get<bool>();
+        colorCode = data.at("colorCode").get<bool>();
+        favorablePriceColor = data.at("favorablePriceColor").get<std::string>();
+        unfavorablePriceColor = data.at("unfavorablePriceColor").get<std::string>();
+        indicatorPadding = data.at("indicatorPadding").get<int>();
+    } catch (...) {
+    }
+}
+
+static void OnDataLoad() {
     BuildRules();
     if (!rules.empty()) {
+        LoadConfig();
         disabled = TESForm::LookupByEditorID<TESGlobal>("DynamicPricing_Disabled");
         player = PlayerCharacter::GetSingleton();
         static MyEventSink g_EventSink;
@@ -301,10 +343,10 @@ void OnDataLoad() {
     }
 }
 
-SKSEPluginLoad(const SKSE::LoadInterface *skse) {
+SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     SKSE::Init(skse);
 
-    SKSE::GetMessagingInterface()->RegisterListener([](SKSE::MessagingInterface::Message *message) {
+    SKSE::GetMessagingInterface()->RegisterListener([](SKSE::MessagingInterface::Message* message) {
         if (message->type == SKSE::MessagingInterface::kDataLoaded) {
             OnDataLoad();
         };

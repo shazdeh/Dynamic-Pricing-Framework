@@ -1,0 +1,7 @@
+{
+    "showIndicators" : true,
+    "colorCode" : true,
+    "favorablePriceColor" : "0x00ff00",
+    "unfavorablePriceColor" : "0xff0000",
+    "indicatorPadding" : 5
+}
