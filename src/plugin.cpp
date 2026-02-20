@@ -21,6 +21,10 @@ struct Rule {
     float buyMult = 1.0f;
     float sellMult = 1.0f;
     bool defaultMults = true;
+    TESGlobal* buyMultGLOB;
+    TESGlobal* sellMultGLOB;
+    // bool checkStolen = false;
+    // bool stolen = false;
 };
 
 std::vector<Rule> rules;
@@ -135,8 +139,11 @@ static void Inject(BSFixedString menuName) {
         GFxValue ruleData;
         movie->CreateObject(&ruleData);
         ruleData.SetMember("keywords", keywords);
-        ruleData.SetMember("buy", rule.buyMult);
-        ruleData.SetMember("sell", rule.sellMult);
+        ruleData.SetMember("buy", rule.buyMultGLOB ? rule.buyMultGLOB->value : rule.buyMult);
+        ruleData.SetMember("sell", rule.sellMultGLOB ? rule.sellMultGLOB->value : rule.sellMult);
+        // if (rule.checkStolen) {
+        //     ruleData.SetMember("stolen", rule.stolen);
+        // }
         if (rule.defaultMults == false) {
             ruleData.SetMember("defaultMults", false);
         }
@@ -184,6 +191,10 @@ static void ParseData(const json& data) {
                 newRule.perk = TESForm::LookupByEditorID<BGSPerk>(conditions.at("perk").get<std::string>());
                 if (!newRule.perk) continue;
             }
+            // if (conditions.contains("stolen")) {
+            //     newRule.checkStolen = true;
+            //     newRule.stolen = conditions.at("stolen").get<bool>();
+            // }
             if (conditions.contains("locations")) {
                 const auto& locations = conditions.at("locations");
                 if (locations.is_string()) {
@@ -272,10 +283,28 @@ static void ParseData(const json& data) {
             }
         }
         if (item.contains("buyMult")) {
-            newRule.buyMult = item.at("buyMult").get<float>();
+            const auto& value = item.at("buyMult");
+            if (value.is_string()) {
+                TESGlobal* form = TESForm::LookupByEditorID<TESGlobal>(value.get<std::string>());
+                if (!form) continue;
+                newRule.buyMultGLOB = form;
+            } else if (value.is_number_float()) {
+                newRule.buyMult = value.get<float>();
+            } else {
+                continue;
+            }
         }
         if (item.contains("sellMult")) {
-            newRule.sellMult = item.at("sellMult").get<float>();
+            const auto& value = item.at("sellMult");
+            if (value.is_string()) {
+                TESGlobal* form = TESForm::LookupByEditorID<TESGlobal>(value.get<std::string>());
+                if (!form) continue;
+                newRule.sellMultGLOB = form;
+            } else if (value.is_number_float()) {
+                newRule.sellMult = value.get<float>();
+            } else {
+                continue;
+            }
         }
         // weather default price multipliers should be disabled for this item
         if (item.contains("defaultMults") && item.at("defaultMults").get<bool>() == false) {

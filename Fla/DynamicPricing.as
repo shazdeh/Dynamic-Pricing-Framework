@@ -217,6 +217,7 @@ class DynamicPricing extends MovieClip {
                 total += (mult - 1);
             }
         }
+        if (total < 0) total = 0; /* in game, buy prices never drop below 1 */
 
         if (total !== 1 && (bPriceColorCoding || bIndicators)) {
             if (isBuying) {

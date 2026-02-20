@@ -1,12 +1,23 @@
-# Dyanmic Pricing Framework
+#### YOU NEED CMAKE < 3.5 !
 
-Mod is available at https://www.nexusmods.com/skyrimspecialedition/mods/167487
+#### WINDOWS ENVIRONMENT VARIABLES TO SET
 
-Based on CommonLibSSE NG:
+1. **`COMMONLIB_SSE_FOLDER`**: The path to your clone of Commonlib.
+2. **`VCPKG_ROOT`**: The path to your clone of [vcpkg](https://github.com/microsoft/vcpkg).
+3. (optional) **`SKYRIM_FOLDER`**: path of your Skyrim Special Edition folder.
+4. (optional) **`SKYRIM_MODS_FOLDER`**: path of the folder where your mods are.
 
-[CommonLibSSE NG](https://github.com/CharmedBaryon/CommonLibSSE-NG) is a fork of the popular [powerof3 fork](https://github.com/powerof3/CommonLibSSE) of the _original_ `CommonLibSSE` library created by [Ryan McKenzie](https://github.com/Ryan-rsm-McKenzie) in [2018](https://github.com/Ryan-rsm-McKenzie/CommonLibSSE/commit/224773c424bdb8e36c761810cdff0fcfefda5f4a).
+#### THINGS TO EDIT
 
-# Credits & License
+1. CMakeLists.txt
+- **`AUTHORNAME`**
+- **`MDDNAME`**
+- (optional) Your plugin version. Default: `0.1.0.0`
+2. vcpkg.json
+- **`name`**: Your plugin's name.
+- **`version-string`**: Your plugin version. Default: `0.1.0.0`
 
-Based on the [SKSE Templates by mrowrpurr](https://github.com/SkyrimScripting/SKSE_Templates).
-Project is licensed under MIT.
+#### FEATURES
+Automatically imports:
+- [CLibUtil](https://github.com/powerof3/CLibUtil) by powerof3
+- [SKSE Menu Framework](https://www.nexusmods.com/skyrimspecialedition/mods/120352) by Thiago099
