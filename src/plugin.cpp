@@ -37,6 +37,8 @@ bool colorCode = true;
 std::string favorablePriceColor = "0x00ff00";
 std::string unfavorablePriceColor = "0xff0000";
 int indicatorPadding = 5;
+BGSKeyword* FixedBuyPrice;
+BGSKeyword* FixedSellPrice;
 
 static bool PlayerIsInLocation(BGSLocation* location) {
     BGSLocation* current = player->GetCurrentLocation();
@@ -160,6 +162,8 @@ static void Inject(BSFixedString menuName) {
     config.SetMember("favorablePriceColor", GFxValue(favorablePriceColor));
     config.SetMember("unfavorablePriceColor", GFxValue(unfavorablePriceColor));
     config.SetMember("indicatorPadding", indicatorPadding);
+    config.SetMember("fixedBuyKeyword", FixedBuyPrice->GetFormEditorID());
+    config.SetMember("fixedSellKeyword", FixedSellPrice->GetFormEditorID());
     _root.SetMember("DPF_Config", config);
 
     GFxValue args[2];
@@ -325,6 +329,7 @@ static void BuildRules() {
             if (data.is_discarded()) continue;
             ParseData(data);
         } catch (...) {
+            logger::warn("Error in parsing JSON file {}", file.path().string());
         }
     }
 }
@@ -366,6 +371,13 @@ static void OnDataLoad() {
     if (!rules.empty()) {
         LoadConfig();
         disabled = TESForm::LookupByEditorID<TESGlobal>("DynamicPricing_Disabled");
+        FixedBuyPrice = TESForm::LookupByEditorID<BGSKeyword>("DPF_FixedBuyPrice");
+        FixedSellPrice = TESForm::LookupByEditorID<BGSKeyword>("DPF_FixedSellPrice");
+        if (!FixedBuyPrice || !FixedSellPrice) {
+            logger::critical("Dynamic Pricing Framework ESP is missing.");
+            rules.clear();
+            return;
+        }
         player = PlayerCharacter::GetSingleton();
         static MyEventSink g_EventSink;
         UI::GetSingleton()->AddEventSink(&g_EventSink);

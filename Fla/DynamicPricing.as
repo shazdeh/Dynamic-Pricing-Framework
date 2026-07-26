@@ -24,6 +24,8 @@ class DynamicPricing extends MovieClip {
     private var PriceTfName:String; /* name of TextField in entryClip that holds price value */
     private var lastHighlightIndex:Number = -1;
     private var indicators:Array = new Array();
+    private var fixedBuyKeyword:String;
+    private var fixedSellKeyword:String;
 
     function DynamicPricing() {
         DynamicPricing.instance = this;
@@ -35,6 +37,8 @@ class DynamicPricing extends MovieClip {
             favorablePriceColor = parseInt(config.favorablePriceColor, 16);
             unfavorablePriceColor = parseInt(config.unfavorablePriceColor, 16);
             indicatorPadding = config.indicatorPadding;
+            fixedBuyKeyword = config.fixedBuyKeyword;
+            fixedSellKeyword = config.fixedSellKeyword;
         }
     }
 
@@ -207,6 +211,10 @@ class DynamicPricing extends MovieClip {
     }
 
     function processItem(itemKeywords:Object, formId:Number, price:Number, isBuying:Boolean) : Array {
+        if ( (isBuying && itemKeywords[fixedBuyKeyword] === true) || (!isBuying && itemKeywords[fixedSellKeyword] === true) ) {
+            return [price, false];
+        }
+
         var total:Number = 1;
         var defaultMults:Boolean = true;
 
