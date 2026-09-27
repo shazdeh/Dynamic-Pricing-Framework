@@ -188,8 +188,14 @@ class DynamicPricing extends MovieClip {
         a_itemInfo.value = Math.floor(result[0]);
 
         if (result[1]) {
+            var defaultMultBasePrice:Number = a_itemInfo.value;
             // call BarterDataSetter.processEntry which applies default barter multipliers
             processor.DPF__processEntry(a_entryObject, a_itemInfo);
+            if (result[2] !== 1) {
+                a_itemInfo.value = compressDefaultMultiplier(defaultMultBasePrice, a_itemInfo.value, result[2], isBuying);
+                // BarterDataSetter already processed the uncompressed value, so update the entry again.
+                InventoryDataSetter.prototype.processEntry.call(processor, a_entryObject, a_itemInfo);
+            }
         } else {
             // skip BarterDataSetter.processEntry
             InventoryDataSetter.prototype.processEntry.call(processor, a_entryObject, a_itemInfo);
@@ -199,10 +205,18 @@ class DynamicPricing extends MovieClip {
     // override Menu.UpdateItemCardInfo
     function UpdateItemCardInfo(a_updateObj: Object): Void {
         this = DynamicPricing.instance;
-        var result:Array = processItem(itemList.selectedEntry.keywords, a_updateObj.formId, a_updateObj.value, Menu.isViewingVendorItems());
+        var isBuying:Boolean = Menu.isViewingVendorItems(),
+            result:Array = processItem(itemList.selectedEntry.keywords, a_updateObj.formId, a_updateObj.value, isBuying);
         a_updateObj.value = Math.floor(result[0]);
         if (result[1]) {
+            var defaultMultBasePrice:Number = a_updateObj.value;
             Menu.DPF__UpdateItemCardInfo(a_updateObj);
+            if (result[2] !== 1) {
+                a_updateObj.value = compressDefaultMultiplier(defaultMultBasePrice, a_updateObj.value, result[2], isBuying);
+                // The original handler already displayed the uncompressed value, so update it again.
+                Menu.itemCard.itemInfo = a_updateObj;
+                Menu.bottomBar.updateBarterPerItemInfo(a_updateObj);
+            }
         } else {
             // stripped version of Menu.UpdateItemCardInfo which skips applying default barter multipliers
             Menu.itemCard.itemInfo = a_updateObj;
@@ -212,15 +226,19 @@ class DynamicPricing extends MovieClip {
 
     function processItem(itemKeywords:Object, formId:Number, price:Number, isBuying:Boolean) : Array {
         if ( (isBuying && itemKeywords[fixedBuyKeyword] === true) || (!isBuying && itemKeywords[fixedSellKeyword] === true) ) {
-            return [price, false];
+            return [price, false, 1];
         }
 
         var total:Number = 1;
         var defaultMults:Boolean = true;
+        var defaultMultCompression:Number = 1;
 
         for (var i = 0; i < data.length; i++) {
             if (doKeywordsMatch(data[i].keywords, itemKeywords)) {
                 if (data[i].defaultMults === false) defaultMults = false;
+                if (data[i].defaultMultCompression !== undefined) {
+                    defaultMultCompression *= data[i].defaultMultCompression;
+                }
                 var mult:Number = isBuying ? data[i].buy : data[i].sell;
                 total += (mult - 1);
             }
@@ -237,8 +255,17 @@ class DynamicPricing extends MovieClip {
 
         return [
             price * total,
-            defaultMults
+            defaultMults,
+            defaultMultCompression
         ];
+    }
+
+    function compressDefaultMultiplier(defaultMultBasePrice:Number, calculatedPrice:Number, compression:Number, isBuying:Boolean):Number {
+        // Equivalent to: defaultMultBasePrice * (1 + (defaultMultiplier - 1) * compression).
+        // This form also works when the price before applying the default multiplier is zero.
+        var compressedPrice:Number = defaultMultBasePrice + (calculatedPrice - defaultMultBasePrice) * compression;
+        if (isBuying) compressedPrice = Math.max(compressedPrice, 1);
+        return Math.floor(compressedPrice + 0.5);
     }
 
     // check if an item matches any of the keywords specified in the rule
